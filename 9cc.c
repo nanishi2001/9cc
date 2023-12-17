@@ -43,16 +43,6 @@ void error_at(char *loc, char *fmt, ...) {
 	exit(1);
 }
 
-//エラーを報告するための関数
-//printfと同じ引数を取る
-void error(char *fmt, ...) {
-	va_list ap;
-	va_start(ap, fmt);
-	vfprintf(stderr, fmt, ap);
-	fprintf(stderr, "\n");
-	exit(1);
-}
-
 //次のトークンが期待している記号の時には、トークンを1つ読み進めて
 //真を返す。それ以外の場合には偽を返す。
 bool consume(char op) {
@@ -66,7 +56,7 @@ bool consume(char op) {
 //それ以外の場合はエラーを報告する
 void expect(char op) {
 	if(token->kind != TK_RESERVED || token->str[0] != op)
-		error("`%c`ではありません", op);
+		error_at(token->str, "`%c`ではありません", op);
 	token = token->next;
 }
 
@@ -74,7 +64,7 @@ void expect(char op) {
 //それ以外の場合はエラーを報告する
 int expect_number() {
 	if (token->kind != TK_NUM)
-		error("数ではありません");
+		error_at(token->str, "数ではありません");
 	int val = token->val;
 	token = token->next;
 	return val;
@@ -106,7 +96,7 @@ Token *tokenize(char *p) {
 			continue;
 		}
 
-		if (*p == '+' || *p == '-' || *p == '*' || *p =='/' || *p == '(' || *p == ')') {
+		if (strchr("+-*/()", *p)) {
 			cur = new_token(TK_RESERVED, cur, p++);
 			continue;
 		}
@@ -117,7 +107,7 @@ Token *tokenize(char *p) {
 			continue;
 		}
 
-		error("トークナイズできません");
+		error_at(p, "トークナイズできません");
 		
 	}
 
@@ -154,10 +144,6 @@ Node *new_node(NodeKind kind, Node *lhs, Node *rhs) {
 	return node;
 }
 
-//関数プロトタイプ宣言
-Node *mul();
-Node *primary();
-
 //数値用のノード新規作成用関数
 Node *new_node_num(int val) {
 	Node *node = calloc(1, sizeof(Node));
@@ -166,7 +152,12 @@ Node *new_node_num(int val) {
 	return node;
 }
 
-//抽象構文木の
+//関数プロトタイプ宣言
+Node *mul();
+Node *primary();
+Node *unary();
+
+//expr = mul ("+" mul | "-" mul)*
 Node *expr() {
 	Node *node = mul();
 
@@ -180,19 +171,30 @@ Node *expr() {
 	}
 }
 
+//mul = unary ("*" unary | "/" unary)*
 Node *mul() {
-	Node *node = primary();
+	Node *node = unary();
 
 	for(;;) {
 		if (consume('*'))
-			node = new_node(ND_MUL, node, primary());
+			node = new_node(ND_MUL, node, unary());
 		else if (consume('/'))
-			node = new_node(ND_DIV, node, primary());
+			node = new_node(ND_DIV, node, unary());
 		else
 			return node;
 	}
 }
 
+//unary = ("+" | "-") primary
+Node *unary() {
+	if (consume('+'))
+		return primary();
+	if (consume('-'))
+		return new_node(ND_SUB, new_node_num(0), primary());
+	return primary();
+}
+
+//primary = "(" expr ")" | num
 Node *primary() {
 	//次のトークンが"("なら、"(" expr ")"が期待できる
 	if (consume('(')) {
@@ -205,6 +207,7 @@ Node *primary() {
 	return new_node_num(expect_number());
 }
 
+//コードを生成する関数
 void gen(Node *node) {
 	if(node->kind == ND_NUM) {
 		printf("	push %d\n", node->val);
