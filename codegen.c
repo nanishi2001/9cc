@@ -38,15 +38,6 @@ Node *new_node_num(int val) {
 	return node;
 }
 
-//関数プロトタイプ宣言
-Node *expr();
-Node *equality();
-Node *relational();
-Node *add();
-Node *mul();
-Node *primary();
-Node *unary();
-
 //expr = equality
 Node *expr() {
 	return equality();
